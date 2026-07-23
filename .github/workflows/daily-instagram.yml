@@ -4,12 +4,6 @@ on:
   schedule:
     - cron: "39 20 * * *"
       timezone: "Europe/Rome"
-    - cron: "49 20 * * *"
-      timezone: "Europe/Rome"
-    - cron: "59 20 * * *"
-      timezone: "Europe/Rome"
-    - cron: "9 21 * * *"
-      timezone: "Europe/Rome"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -39,92 +33,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decide run mode
-        id: mode
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-              echo "dry_run=true" >> "$GITHUB_OUTPUT"
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "dry_run=false" >> "$GITHUB_OUTPUT"
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "dry_run=false" >> "$GITHUB_OUTPUT"
-            SHOULD_PUBLISH=$(python - <<'PY'
-          import json
-          from datetime import datetime
-          from pathlib import Path
-          from zoneinfo import ZoneInfo
-
-          state_path = Path("state.json")
-          if not state_path.exists():
-              print("true")
-              raise SystemExit
-
-          state = json.loads(state_path.read_text(encoding="utf-8"))
-          last = (state.get("last_published") or {}).get("published_at")
-          if not last:
-              print("true")
-              raise SystemExit
-
-          published = datetime.fromisoformat(last.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome"))
-          today = datetime.now(ZoneInfo("Europe/Rome")).date()
-          print("false" if published.date() == today else "true")
-          PY
-            )
-            echo "publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Set up Python
-        if: ${{ steps.mode.outputs.dry_run == 'true' || steps.mode.outputs.publish == 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
-        if: ${{ steps.mode.outputs.dry_run == 'true' || steps.mode.outputs.publish == 'true' }}
         run: pip install -r requirements.txt
 
-      - name: Apply curated phrase replacements
-        if: ${{ steps.mode.outputs.dry_run == 'true' || steps.mode.outputs.publish == 'true' }}
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          base_path = Path("phrases.json")
-          overrides_path = Path("phrases_overrides.json")
-          phrases = json.loads(base_path.read_text(encoding="utf-8"))
-          overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
-
-          by_id = {int(item["id"]): item for item in phrases}
-          for item in overrides:
-              by_id[int(item["id"])] = item
-
-          merged = [by_id[key] for key in sorted(by_id)]
-          base_path.write_text(
-              json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          print(f"Banca attiva: {len(merged)} frasi, {len(overrides)} sostituzioni curate.")
-          PY
-
       - name: Configure Git
-        if: ${{ steps.mode.outputs.publish == 'true' }}
         run: |
           git config user.name "stopfallingdown-bot"
           git config user.email "actions@users.noreply.github.com"
 
       - name: Generate dry-run preview
-        if: ${{ steps.mode.outputs.dry_run == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: python bot.py prepare --dry-run
 
       - name: Upload dry-run preview
-        if: ${{ steps.mode.outputs.dry_run == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
           name: stopfallingdown-preview
@@ -132,64 +60,36 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Prepare or reuse pending Instagram post
-        if: ${{ steps.mode.outputs.publish == 'true' }}
+      - name: Prepare next Instagram post
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: python bot.py prepare
 
-      - name: Restore base phrase file before commit
-        if: ${{ steps.mode.outputs.publish == 'true' }}
-        run: git checkout -- phrases.json
-
       - name: Commit generated image before publishing
-        if: ${{ steps.mode.outputs.publish == 'true' }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: |
           git add generated/ pending.json state.json
           if git diff --cached --quiet; then
-            echo "Nessuna modifica da salvare: esiste già un post pending da ritentare."
+            echo "Nessuna modifica da salvare: probabilmente esiste già un post pending da ritentare."
           else
             git commit -m "Prepare next Instagram post"
             git push
           fi
 
       - name: Wait for public image availability
-        if: ${{ steps.mode.outputs.publish == 'true' }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: sleep 20
 
-      - name: Publish to Instagram with retries
-        if: ${{ steps.mode.outputs.publish == 'true' }}
-        shell: bash
-        run: |
-          for attempt in 1 2 3; do
-            echo "Tentativo di pubblicazione $attempt/3"
-            if python bot.py publish; then
-              exit 0
-            fi
-            if [[ "$attempt" -lt 3 ]]; then
-              echo "Pubblicazione fallita, nuovo tentativo tra 30 secondi..."
-              sleep 30
-            fi
-          done
-          echo "Pubblicazione fallita dopo 3 tentativi. Il post pending verrà ritentato automaticamente dal prossimo run programmato."
-          exit 1
+      - name: Publish to Instagram
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: python bot.py publish
 
       - name: Save publication state
-        if: ${{ steps.mode.outputs.publish == 'true' }}
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: |
           git add -A state.json pending.json published.jsonl
           if git diff --cached --quiet; then
             echo "Nessun aggiornamento di stato da salvare."
           else
             git commit -m "Record Instagram publication"
-            for attempt in 1 2 3; do
-              if git push; then
-                exit 0
-              fi
-              git pull --rebase
-              sleep 5
-            done
-            exit 1
+            git push
           fi
-
-      - name: Daily post already published
-        if: ${{ steps.mode.outputs.publish == 'false' && steps.mode.outputs.dry_run == 'false' }}
-        run: echo "Il post di oggi risulta già pubblicato: nessuna azione necessaria."
