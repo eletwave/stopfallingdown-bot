@@ -89,6 +89,30 @@ jobs:
         if: ${{ steps.mode.outputs.dry_run == 'true' || steps.mode.outputs.publish == 'true' }}
         run: pip install -r requirements.txt
 
+      - name: Apply curated phrase replacements
+        if: ${{ steps.mode.outputs.dry_run == 'true' || steps.mode.outputs.publish == 'true' }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          base_path = Path("phrases.json")
+          overrides_path = Path("phrases_overrides.json")
+          phrases = json.loads(base_path.read_text(encoding="utf-8"))
+          overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
+
+          by_id = {int(item["id"]): item for item in phrases}
+          for item in overrides:
+              by_id[int(item["id"])] = item
+
+          merged = [by_id[key] for key in sorted(by_id)]
+          base_path.write_text(
+              json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(f"Banca attiva: {len(merged)} frasi, {len(overrides)} sostituzioni curate.")
+          PY
+
       - name: Configure Git
         if: ${{ steps.mode.outputs.publish == 'true' }}
         run: |
@@ -111,6 +135,10 @@ jobs:
       - name: Prepare or reuse pending Instagram post
         if: ${{ steps.mode.outputs.publish == 'true' }}
         run: python bot.py prepare
+
+      - name: Restore base phrase file before commit
+        if: ${{ steps.mode.outputs.publish == 'true' }}
+        run: git checkout -- phrases.json
 
       - name: Commit generated image before publishing
         if: ${{ steps.mode.outputs.publish == 'true' }}
