@@ -82,8 +82,7 @@ def build_text_layout(text: str) -> tuple[ImageFont.FreeTypeFont, list[str], int
         font = ImageFont.truetype(path, size=size)
         lines = wrap_lines(draw, text, font, 860)
         line_height = int(size * 1.18)
-        total_height = len(lines) * line_height
-        if len(lines) <= 9 and total_height <= 650:
+        if len(lines) <= 9 and len(lines) * line_height <= 650:
             return font, lines, line_height
     font = ImageFont.truetype(path, size=46)
     return font, wrap_lines(draw, text, font, 860), 56
@@ -91,21 +90,19 @@ def build_text_layout(text: str) -> tuple[ImageFont.FreeTypeFont, list[str], int
 
 def distress_mask(mask: Image.Image, seed: int) -> Image.Image:
     rng = random.Random(seed)
-    scratch = ImageDraw.Draw(mask)
+    draw = ImageDraw.Draw(mask)
     width, height = mask.size
-
     for _ in range(320):
         x = rng.randint(90, width - 90)
         y = rng.randint(120, height - 160)
         w = rng.randint(2, 12)
         h = rng.randint(1, 4)
-        scratch.rectangle((x, y, x + w, y + h), fill=0)
-
+        draw.rectangle((x, y, x + w, y + h), fill=0)
     for _ in range(40):
         x = rng.randint(100, width - 100)
         y = rng.randint(140, height - 180)
         length = rng.randint(12, 45)
-        scratch.line((x, y, x + length, y + rng.randint(-2, 2)), fill=0, width=1)
+        draw.line((x, y, x + length, y + rng.randint(-2, 2)), fill=0, width=1)
     return mask
 
 
@@ -115,15 +112,13 @@ def generate_image(text: str, phrase_id: int, output: Path) -> None:
     mask = Image.new("L", canvas.size, 0)
     draw = ImageDraw.Draw(mask)
 
-    main_text = text.upper()
-    font, lines, line_height = build_text_layout(main_text)
+    font, lines, line_height = build_text_layout(text.upper())
     total_height = len(lines) * line_height
     top = max(110, (900 - total_height) // 2)
 
     for index, line in enumerate(lines):
         box = draw.textbbox((0, 0), line, font=font)
-        line_width = box[2] - box[0]
-        x = (1080 - line_width) // 2
+        x = (1080 - (box[2] - box[0])) // 2
         y = top + index * line_height
         draw.text((x, y), line, font=font, fill=255, stroke_width=1, stroke_fill=255)
 
@@ -144,12 +139,10 @@ def choose_phrase() -> dict[str, Any]:
     state: dict[str, Any] = read_json(STATE_FILE, {"used_ids": [], "last_published": None})
     used = set(state.get("used_ids", []))
     available = [phrase for phrase in phrases if phrase["id"] not in used]
-
     if not available:
         state["used_ids"] = []
         write_json(STATE_FILE, state)
         available = phrases
-
     if not available:
         raise RuntimeError("La banca frasi è vuota.")
     return random.SystemRandom().choice(available)
@@ -220,7 +213,7 @@ def publish() -> None:
     sha = current_git_sha()
     image_path = pending["image_path"]
     image_url = f"https://raw.githubusercontent.com/{repository}/{sha}/{image_path}"
-    base = f"https://graph.instagram.com/{api_version}"
+    base = f"https://graph.facebook.com/{api_version}"
 
     container = graph_post(
         f"{base}/{ig_user_id}/media",
@@ -264,7 +257,6 @@ def publish() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Automazione Instagram @stopfallingdown")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
     prepare_parser = subparsers.add_parser("prepare", help="Sceglie una frase e genera la grafica")
     prepare_parser.add_argument("--dry-run", action="store_true", help="Genera solo generated/dry-run.jpg")
     subparsers.add_parser("publish", help="Pubblica il post preparato tramite Instagram API")
