@@ -8,7 +8,7 @@ Automazione gratuita basata su GitHub Actions per preparare e pubblicare post te
 2. Genera automaticamente un'immagine JPEG 1080×1080 con sfondo nero, testo bianco effetto consumato e firma `@STOPFALLINGDOWN`.
 3. Compone la caption e gli hashtag in base alla categoria della frase.
 4. Salva l'immagine nel repository pubblico e usa il relativo URL pubblico per la pubblicazione.
-5. Pubblica tramite Instagram API.
+5. Pubblica tramite Instagram API con Instagram Login (`graph.instagram.com`).
 6. Aggiorna `state.json` e `published.jsonl`, evitando di ripetere una frase finché la banca non è stata completata.
 7. Se una pubblicazione fallisce, `pending.json` rimane disponibile e il run successivo ritenta lo stesso post.
 
@@ -20,6 +20,28 @@ Automazione gratuita basata su GitHub Actions per preparare e pubblicare post te
 - `.github/workflows/daily-instagram.yml` — automazione giornaliera.
 - `generated/` — immagini create automaticamente.
 - `published.jsonl` — storico delle pubblicazioni riuscite.
+- `docs/` — pagine di supporto per autorizzare `@stopfallingdown` con Business Login for Instagram.
+
+## Collegamento Instagram
+
+La nuova app Meta usata dal progetto è `Stopfallingdown-ins`, App ID `1417558586879101`.
+
+Il flusso richiede questi scope:
+
+- `instagram_business_basic`
+- `instagram_business_content_publish`
+
+Il redirect OAuth configurato dal progetto è:
+
+`https://eletwave.github.io/stopfallingdown-bot/callback.html`
+
+Dopo aver abilitato GitHub Pages dalla cartella `/docs`, apri:
+
+`https://eletwave.github.io/stopfallingdown-bot/`
+
+La pagina avvia il login Instagram, riceve il codice OAuth e permette di scambiarlo direttamente con Instagram per un token breve. La pagina `token-tools.html` permette poi di convertire il token breve in un token a lunga durata.
+
+Le chiavi e i token inseriti nelle pagine statiche vengono inviati direttamente agli endpoint Instagram indicati nei form e non vengono salvati nel repository.
 
 ## Secrets richiesti
 
@@ -29,18 +51,18 @@ Apri il repository su GitHub e vai in:
 
 Aggiungi:
 
-- `IG_USER_ID` — ID dell'account Instagram professionale usato dall'API.
-- `IG_ACCESS_TOKEN` — access token con i permessi necessari alla pubblicazione.
+- `IG_USER_ID` — `user_id` restituito dal login Instagram.
+- `IG_ACCESS_TOKEN` — token Instagram a lunga durata.
 
 Opzionale:
 
-- `META_API_VERSION` — versione della Graph API da usare. Se assente, il codice usa `v23.0` come fallback configurabile.
+- `META_API_VERSION` — versione della Graph API da usare. Se assente, il codice usa `v25.0`.
 
 Non inserire mai token o password direttamente nei file del repository.
 
 ## Orario
 
-Il workflow è configurato per partire ogni giorno alle **20:37, fuso Europe/Rome**.
+Il workflow è configurato per partire ogni giorno alle **20:37** secondo la configurazione del workflow.
 
 Il workflow può essere avviato anche manualmente dalla scheda **Actions**.
 
