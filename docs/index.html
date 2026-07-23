@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Stopfallingdown – Instagram Login</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;background:#111;color:#f5f5f5;max-width:760px;margin:0 auto;padding:32px 20px;line-height:1.5}
+    .card{background:#1b1b1b;border:1px solid #333;border-radius:16px;padding:22px;margin:18px 0}
+    a.button,button{display:inline-block;background:#fff;color:#111;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;border:0;cursor:pointer}
+    code{background:#262626;padding:2px 6px;border-radius:6px;word-break:break-all}
+    .muted{color:#aaa}
+  </style>
+</head>
+<body>
+  <h1>Stopfallingdown – collega Instagram</h1>
+  <p>Questa pagina avvia il Business Login for Instagram per l'app Meta <strong>Stopfallingdown-ins</strong>.</p>
+  <div class="card">
+    <p>Verranno richiesti solo i permessi necessari al bot:</p>
+    <p><code>instagram_business_basic</code><br><code>instagram_business_content_publish</code></p>
+    <a class="button" id="login" href="#">Collega @stopfallingdown</a>
+  </div>
+  <p class="muted">App ID: 1417558586879101. Il token non viene salvato in questo sito.</p>
+<script>
+  const clientId = '1417558586879101';
+  const redirectUri = 'https://eletwave.github.io/stopfallingdown-bot/callback.html';
+  const scopes = 'instagram_business_basic,instagram_business_content_publish';
+  const url = new URL('https://www.instagram.com/oauth/authorize');
+  url.searchParams.set('enable_fb_login','0');
+  url.searchParams.set('force_authentication','1');
+  url.searchParams.set('client_id',clientId);
+  url.searchParams.set('redirect_uri',redirectUri);
+  url.searchParams.set('response_type','code');
+  url.searchParams.set('scope',scopes);
+  document.getElementById('login').href = url.toString();
+</script>
+</body>
+</html>
