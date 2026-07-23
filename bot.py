@@ -5,6 +5,7 @@ import json
 import os
 import random
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -197,6 +198,41 @@ def graph_post(url: str, data: dict[str, str]) -> dict[str, Any]:
     return payload
 
 
+def graph_get(url: str, params: dict[str, str]) -> dict[str, Any]:
+    response = requests.get(url, params=params, timeout=90)
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Risposta Meta non JSON ({response.status_code}): {response.text[:500]}") from exc
+    if not response.ok or "error" in payload:
+        raise RuntimeError(f"Errore Meta API ({response.status_code}): {json.dumps(payload, ensure_ascii=False)}")
+    return payload
+
+
+def wait_for_container(base: str, creation_id: str, access_token: str) -> None:
+    for attempt in range(1, 31):
+        status = graph_get(
+            f"{base}/{creation_id}",
+            {
+                "fields": "status_code,status",
+                "access_token": access_token,
+            },
+        )
+        status_code = str(status.get("status_code", "")).upper()
+        status_text = str(status.get("status", ""))
+        print(f"Stato container {creation_id}: {status_code or 'SCONOSCIUTO'} {status_text}")
+
+        if status_code == "FINISHED":
+            return
+        if status_code in {"ERROR", "EXPIRED"}:
+            raise RuntimeError(f"Container Instagram non pubblicabile: {json.dumps(status, ensure_ascii=False)}")
+
+        if attempt < 30:
+            time.sleep(5)
+
+    raise RuntimeError("Timeout: il container Instagram non è diventato FINISHED entro 150 secondi.")
+
+
 def publish() -> None:
     pending = read_json(PENDING_FILE, None)
     if not pending:
@@ -224,6 +260,8 @@ def publish() -> None:
         },
     )
     creation_id = str(container["id"])
+
+    wait_for_container(base, creation_id, access_token)
 
     result = graph_post(
         f"{base}/{ig_user_id}/media_publish",
