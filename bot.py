@@ -32,6 +32,16 @@ HASHTAGS: dict[str, list[str]] = {
     "verita": ["#frasi", "#verita", "#sincerita", "#fiducia", "#pensieri", "#riflessioni", "#stopfallingdown"],
     "ripartenza": ["#frasi", "#ripartire", "#rinascita", "#crescita", "#forza", "#pensieri", "#stopfallingdown"],
     "confini": ["#frasi", "#confini", "#amorproprio", "#rispetto", "#consapevolezza", "#pensieri", "#stopfallingdown"],
+    "rivalsa": ["#frasi", "#rivalsa", "#riscatto", "#forza", "#motivazione", "#rapitaliano", "#stopfallingdown"],
+    "strada": ["#frasi", "#strada", "#vita", "#lealta", "#realta", "#rapitaliano", "#stopfallingdown"],
+    "ambizione": ["#frasi", "#ambizione", "#obiettivi", "#disciplina", "#successo", "#motivazione", "#stopfallingdown"],
+    "soldi": ["#frasi", "#soldi", "#liberta", "#successo", "#ambizione", "#pensieri", "#stopfallingdown"],
+    "notte": ["#frasi", "#notte", "#pensieri", "#insonnia", "#emozioni", "#rapitaliano", "#stopfallingdown"],
+    "ansia": ["#frasi", "#ansia", "#pensieri", "#mente", "#emozioni", "#consapevolezza", "#stopfallingdown"],
+    "lealta": ["#frasi", "#lealta", "#rispetto", "#amicizia", "#fiducia", "#rapitaliano", "#stopfallingdown"],
+    "tradimento": ["#frasi", "#tradimento", "#bugie", "#fiducia", "#relazioni", "#pensieri", "#stopfallingdown"],
+    "successo": ["#frasi", "#successo", "#obiettivi", "#disciplina", "#rivalsa", "#motivazione", "#stopfallingdown"],
+    "vuoto": ["#frasi", "#vuoto", "#solitudine", "#pensieri", "#emozioni", "#notte", "#stopfallingdown"],
 }
 
 
@@ -295,6 +305,7 @@ def publish() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Automazione Instagram @stopfallingdown")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
     prepare_parser = subparsers.add_parser("prepare", help="Sceglie una frase e genera la grafica")
     prepare_parser.add_argument("--dry-run", action="store_true", help="Genera solo generated/dry-run.jpg")
     subparsers.add_parser("publish", help="Pubblica il post preparato tramite Instagram API")
