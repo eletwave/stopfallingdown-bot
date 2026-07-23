@@ -94,7 +94,6 @@ def distress_mask(mask: Image.Image, seed: int) -> Image.Image:
     scratch = ImageDraw.Draw(mask)
     width, height = mask.size
 
-    # Piccoli tagli e imperfezioni: simulano un carattere stampato/brush consumato.
     for _ in range(320):
         x = rng.randint(90, width - 90)
         y = rng.randint(120, height - 160)
@@ -146,7 +145,6 @@ def choose_phrase() -> dict[str, Any]:
     used = set(state.get("used_ids", []))
     available = [phrase for phrase in phrases if phrase["id"] not in used]
 
-    # Quando la banca è esaurita ricomincia un nuovo ciclo, evitando duplicati nello stesso ciclo.
     if not available:
         state["used_ids"] = []
         write_json(STATE_FILE, state)
@@ -213,7 +211,7 @@ def publish() -> None:
 
     ig_user_id = os.environ.get("IG_USER_ID", "").strip()
     access_token = os.environ.get("IG_ACCESS_TOKEN", "").strip()
-    api_version = os.environ.get("META_API_VERSION", "v23.0").strip() or "v23.0"
+    api_version = os.environ.get("META_API_VERSION", "v25.0").strip() or "v25.0"
     repository = os.environ.get("GITHUB_REPOSITORY", "eletwave/stopfallingdown-bot").strip()
 
     if not ig_user_id or not access_token:
@@ -222,7 +220,7 @@ def publish() -> None:
     sha = current_git_sha()
     image_path = pending["image_path"]
     image_url = f"https://raw.githubusercontent.com/{repository}/{sha}/{image_path}"
-    base = f"https://graph.facebook.com/{api_version}"
+    base = f"https://graph.instagram.com/{api_version}"
 
     container = graph_post(
         f"{base}/{ig_user_id}/media",
