@@ -14,7 +14,7 @@ Automazione basata su GitHub Actions per generare e pubblicare post testuali su 
 
 ## File principali
 
-- `phrases.json` — banca delle frasi.
+- `phrases.json` — banca di 200 frasi originali.
 - `state.json` — ID delle frasi già pubblicate nel ciclo corrente.
 - `bot.py` — generatore grafico e client Instagram Graph API.
 - `.github/workflows/daily-instagram.yml` — automazione giornaliera.
@@ -32,7 +32,7 @@ Opzionale:
 
 - `META_API_VERSION` — versione Graph API. Se assente, il bot usa `v25.0`.
 
-Non inserire token o password direttamente nei file del repository.
+Non inserire mai token o password direttamente nei file del repository.
 
 ## Pubblicazione automatica
 
@@ -50,9 +50,9 @@ Aggiungi nuovi oggetti a `phrases.json` mantenendo un `id` numerico univoco, una
 Esempio:
 
 ```json
-{"id": 61, "category": "crescita", "text": "Una nuova frase completa."}
+{"id": 201, "category": "rivalsa", "text": "Una nuova frase completa."}
 ```
 
 Categorie hashtag configurate:
 
-`distacco`, `amore`, `fiducia`, `crescita`, `solitudine`, `ricordi`, `rispetto`, `verita`, `ripartenza`, `confini`.
+`distacco`, `amore`, `fiducia`, `crescita`, `solitudine`, `ricordi`, `rispetto`, `verita`, `ripartenza`, `confini`, `rivalsa`, `strada`, `ambizione`, `soldi`, `notte`, `ansia`, `lealta`, `tradimento`, `successo`, `vuoto`.
