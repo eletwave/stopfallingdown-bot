@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parent
 PHRASES_FILE = ROOT / "phrases.json"
+OVERRIDES_FILE = ROOT / "phrases_overrides.json"
 STATE_FILE = ROOT / "state.json"
 PENDING_FILE = ROOT / "pending.json"
 PUBLISHED_LOG = ROOT / "published.jsonl"
@@ -32,16 +33,9 @@ HASHTAGS: dict[str, list[str]] = {
     "verita": ["#frasi", "#verita", "#sincerita", "#fiducia", "#pensieri", "#riflessioni", "#stopfallingdown"],
     "ripartenza": ["#frasi", "#ripartire", "#rinascita", "#crescita", "#forza", "#pensieri", "#stopfallingdown"],
     "confini": ["#frasi", "#confini", "#amorproprio", "#rispetto", "#consapevolezza", "#pensieri", "#stopfallingdown"],
-    "rivalsa": ["#frasi", "#rivalsa", "#riscatto", "#forza", "#motivazione", "#rapitaliano", "#stopfallingdown"],
-    "strada": ["#frasi", "#strada", "#vita", "#lealta", "#realta", "#rapitaliano", "#stopfallingdown"],
-    "ambizione": ["#frasi", "#ambizione", "#obiettivi", "#disciplina", "#successo", "#motivazione", "#stopfallingdown"],
-    "soldi": ["#frasi", "#soldi", "#liberta", "#successo", "#ambizione", "#pensieri", "#stopfallingdown"],
-    "notte": ["#frasi", "#notte", "#pensieri", "#insonnia", "#emozioni", "#rapitaliano", "#stopfallingdown"],
-    "ansia": ["#frasi", "#ansia", "#pensieri", "#mente", "#emozioni", "#consapevolezza", "#stopfallingdown"],
-    "lealta": ["#frasi", "#lealta", "#rispetto", "#amicizia", "#fiducia", "#rapitaliano", "#stopfallingdown"],
     "tradimento": ["#frasi", "#tradimento", "#bugie", "#fiducia", "#relazioni", "#pensieri", "#stopfallingdown"],
-    "successo": ["#frasi", "#successo", "#obiettivi", "#disciplina", "#rivalsa", "#motivazione", "#stopfallingdown"],
-    "vuoto": ["#frasi", "#vuoto", "#solitudine", "#pensieri", "#emozioni", "#notte", "#stopfallingdown"],
+    "lealta": ["#frasi", "#lealta", "#rispetto", "#fiducia", "#relazioni", "#pensieri", "#stopfallingdown"],
+    "vuoto": ["#frasi", "#vuoto", "#solitudine", "#pensieri", "#emozioni", "#dolore", "#stopfallingdown"],
 }
 
 
@@ -55,11 +49,22 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def load_phrases() -> list[dict[str, Any]]:
+    phrases: list[dict[str, Any]] = read_json(PHRASES_FILE, [])
+    if OVERRIDES_FILE.exists():
+        overrides: list[dict[str, Any]] = read_json(OVERRIDES_FILE, [])
+        by_id = {int(item["id"]): item for item in phrases}
+        for item in overrides:
+            by_id[int(item["id"])] = item
+        phrases = [by_id[key] for key in sorted(by_id)]
+    return phrases
+
+
 def font_path() -> str:
     candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for candidate in candidates:
         if Path(candidate).exists():
@@ -89,64 +94,69 @@ def build_text_layout(text: str) -> tuple[ImageFont.FreeTypeFont, list[str], int
     probe = Image.new("L", (1080, 1080), 0)
     draw = ImageDraw.Draw(probe)
     path = font_path()
-    for size in range(92, 45, -2):
+    for size in range(94, 43, -2):
         font = ImageFont.truetype(path, size=size)
-        lines = wrap_lines(draw, text, font, 860)
-        line_height = int(size * 1.18)
-        if len(lines) <= 9 and len(lines) * line_height <= 650:
+        lines = wrap_lines(draw, text, font, 900)
+        line_height = int(size * 1.28)
+        if len(lines) <= 8 and len(lines) * line_height <= 670:
             return font, lines, line_height
-    font = ImageFont.truetype(path, size=46)
-    return font, wrap_lines(draw, text, font, 860), 56
+    font = ImageFont.truetype(path, size=44)
+    return font, wrap_lines(draw, text, font, 900), 56
 
 
-def distress_mask(mask: Image.Image, seed: int) -> Image.Image:
-    rng = random.Random(seed)
-    draw = ImageDraw.Draw(mask)
-    width, height = mask.size
-    for _ in range(320):
-        x = rng.randint(90, width - 90)
-        y = rng.randint(120, height - 160)
-        w = rng.randint(2, 12)
-        h = rng.randint(1, 4)
-        draw.rectangle((x, y, x + w, y + h), fill=0)
-    for _ in range(40):
-        x = rng.randint(100, width - 100)
-        y = rng.randint(140, height - 180)
-        length = rng.randint(12, 45)
-        draw.line((x, y, x + length, y + rng.randint(-2, 2)), fill=0, width=1)
-    return mask
+def composite_glow(canvas: Image.Image, mask: Image.Image, color: tuple[int, int, int], blur: float, alpha: int) -> Image.Image:
+    glow_mask = mask.filter(ImageFilter.GaussianBlur(blur))
+    if alpha < 255:
+        glow_mask = glow_mask.point(lambda p: p * alpha // 255)
+    layer = Image.new("RGBA", canvas.size, (*color, 0))
+    layer.putalpha(glow_mask)
+    return Image.alpha_composite(canvas, layer)
 
 
 def generate_image(text: str, phrase_id: int, output: Path) -> None:
+    del phrase_id  # mantenuto nella firma per compatibilità
     output.parent.mkdir(parents=True, exist_ok=True)
-    canvas = Image.new("RGB", (1080, 1080), (0, 0, 0))
-    mask = Image.new("L", canvas.size, 0)
-    draw = ImageDraw.Draw(mask)
+    canvas = Image.new("RGBA", (1080, 1080), (0, 0, 0, 255))
 
     font, lines, line_height = build_text_layout(text.upper())
+    text_mask = Image.new("L", canvas.size, 0)
+    draw = ImageDraw.Draw(text_mask)
     total_height = len(lines) * line_height
-    top = max(110, (900 - total_height) // 2)
+    top = max(145, (900 - total_height) // 2)
 
     for index, line in enumerate(lines):
         box = draw.textbbox((0, 0), line, font=font)
         x = (1080 - (box[2] - box[0])) // 2
         y = top + index * line_height
-        draw.text((x, y), line, font=font, fill=255, stroke_width=1, stroke_fill=255)
+        draw.text((x, y), line, font=font, fill=255)
 
-    mask = distress_mask(mask, phrase_id)
-    ink = Image.new("RGB", canvas.size, (244, 244, 240))
-    canvas.paste(ink, (0, 0), mask)
+    # Glow rosso su più livelli: alone largo, medio e vicino al tubo neon.
+    canvas = composite_glow(canvas, text_mask, (255, 0, 0), 30, 75)
+    canvas = composite_glow(canvas, text_mask, (255, 0, 0), 14, 135)
+    canvas = composite_glow(canvas, text_mask, (255, 15, 15), 5, 220)
 
+    core = Image.new("RGBA", canvas.size, (255, 70, 70, 0))
+    core.putalpha(text_mask)
+    canvas = Image.alpha_composite(canvas, core)
+
+    # Firma piccola e discreta, anch'essa neon.
     handle_font = ImageFont.truetype(font_path(), size=34)
-    handle_draw = ImageDraw.Draw(canvas)
+    handle_mask = Image.new("L", canvas.size, 0)
+    handle_draw = ImageDraw.Draw(handle_mask)
     box = handle_draw.textbbox((0, 0), HANDLE, font=handle_font)
-    handle_draw.text(((1080 - (box[2] - box[0])) // 2, 985), HANDLE, font=handle_font, fill=(215, 215, 210))
+    hx = (1080 - (box[2] - box[0])) // 2
+    hy = 965
+    handle_draw.text((hx, hy), HANDLE, font=handle_font, fill=220)
+    canvas = composite_glow(canvas, handle_mask, (255, 0, 0), 10, 120)
+    handle_core = Image.new("RGBA", canvas.size, (255, 65, 65, 0))
+    handle_core.putalpha(handle_mask)
+    canvas = Image.alpha_composite(canvas, handle_core)
 
-    canvas.save(output, "JPEG", quality=95, optimize=True)
+    canvas.convert("RGB").save(output, "JPEG", quality=95, optimize=True)
 
 
 def choose_phrase() -> dict[str, Any]:
-    phrases: list[dict[str, Any]] = read_json(PHRASES_FILE, [])
+    phrases = load_phrases()
     state: dict[str, Any] = read_json(STATE_FILE, {"used_ids": [], "last_published": None})
     used = set(state.get("used_ids", []))
     available = [phrase for phrase in phrases if phrase["id"] not in used]
@@ -236,7 +246,6 @@ def wait_for_container(base: str, creation_id: str, access_token: str) -> None:
             return
         if status_code in {"ERROR", "EXPIRED"}:
             raise RuntimeError(f"Container Instagram non pubblicabile: {json.dumps(status, ensure_ascii=False)}")
-
         if attempt < 30:
             time.sleep(5)
 
@@ -270,7 +279,6 @@ def publish() -> None:
         },
     )
     creation_id = str(container["id"])
-
     wait_for_container(base, creation_id, access_token)
 
     result = graph_post(
