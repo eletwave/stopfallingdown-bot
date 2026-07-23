@@ -1,0 +1,95 @@
+name: Daily Instagram Post
+
+on:
+  schedule:
+    - cron: "37 20 * * *"
+      timezone: "Europe/Rome"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Genera solo un'anteprima senza pubblicare"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stopfallingdown-instagram-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      META_API_VERSION: ${{ secrets.META_API_VERSION }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure Git
+        run: |
+          git config user.name "stopfallingdown-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Generate dry-run preview
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: python bot.py prepare --dry-run
+
+      - name: Upload dry-run preview
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stopfallingdown-preview
+          path: generated/dry-run.jpg
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Prepare next Instagram post
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: python bot.py prepare
+
+      - name: Commit generated image before publishing
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          git add generated/ pending.json state.json
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da salvare: probabilmente esiste già un post pending da ritentare."
+          else
+            git commit -m "Prepare next Instagram post"
+            git push
+          fi
+
+      - name: Wait for public image availability
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: sleep 20
+
+      - name: Publish to Instagram
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: python bot.py publish
+
+      - name: Save publication state
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          git add -A state.json pending.json published.jsonl
+          if git diff --cached --quiet; then
+            echo "Nessun aggiornamento di stato da salvare."
+          else
+            git commit -m "Record Instagram publication"
+            git push
+          fi
