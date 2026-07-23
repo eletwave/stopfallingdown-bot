@@ -53,13 +53,29 @@ jobs:
             fi
           else
             echo "dry_run=false" >> "$GITHUB_OUTPUT"
-            if [[ "${{ github.event.schedule }}" == "39 20 * * *" ]]; then
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-            elif [[ -f pending.json ]]; then
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-            fi
+            SHOULD_PUBLISH=$(python - <<'PY'
+          import json
+          from datetime import datetime
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          state_path = Path("state.json")
+          if not state_path.exists():
+              print("true")
+              raise SystemExit
+
+          state = json.loads(state_path.read_text(encoding="utf-8"))
+          last = (state.get("last_published") or {}).get("published_at")
+          if not last:
+              print("true")
+              raise SystemExit
+
+          published = datetime.fromisoformat(last.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome"))
+          today = datetime.now(ZoneInfo("Europe/Rome")).date()
+          print("false" if published.date() == today else "true")
+          PY
+            )
+            echo "publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Python
@@ -125,7 +141,7 @@ jobs:
               sleep 30
             fi
           done
-          echo "Pubblicazione fallita dopo 3 tentativi. Il post pending verrà ritentato automaticamente dai run successivi."
+          echo "Pubblicazione fallita dopo 3 tentativi. Il post pending verrà ritentato automaticamente dal prossimo run programmato."
           exit 1
 
       - name: Save publication state
@@ -136,9 +152,16 @@ jobs:
             echo "Nessun aggiornamento di stato da salvare."
           else
             git commit -m "Record Instagram publication"
-            git push
+            for attempt in 1 2 3; do
+              if git push; then
+                exit 0
+              fi
+              git pull --rebase
+              sleep 5
+            done
+            exit 1
           fi
 
-      - name: No pending post to retry
+      - name: Daily post already published
         if: ${{ steps.mode.outputs.publish == 'false' && steps.mode.outputs.dry_run == 'false' }}
-        run: echo "Nessun post pending: questo run di retry non deve pubblicare nulla."
+        run: echo "Il post di oggi risulta già pubblicato: nessuna azione necessaria."
